@@ -1,0 +1,22 @@
+[workspace.package]
+edition    = "2024"
+license    = "MIT or Apache-2.0"
+repository = "https://github.com/logos-blockchain/logos-blockchain"
+version    = "0.1.0"
+
+[workspace]
+members  = ["common", "indexer"]
+resolver = "2"
+
+[workspace.dependencies]
+oracle-zone-common = { path = "./common" }
+
+clap       = { default-features = false, version = "4" }
+hex        = { default-features = false, version = "0.4" }
+k256       = { default-features = false, version = "0.13", features = ["ecdsa", "arithmetic"] }
+rand       = { default-features = false, version = "0.8" }
+serde      = { default-features = false, version = "1.0", features = ["derive"] }
+serde_json = { default-features = false, version = "1.0", features = ["std"] }
+sha2       = { default-features = false, version = "0.10" }
+thiserror  = { default-features = false, version = "2.0" }
+uuid       = { default-features = false, version = "1", features = ["v4"] }
