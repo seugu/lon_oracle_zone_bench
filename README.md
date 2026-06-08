@@ -50,6 +50,39 @@ Output reports, per N: average verify time (ms), per-signature time (us),
 verifications per second, and an extrapolation to a 30s heartbeat, plus a
 comparison line against the LEZ 64-verification ceiling.
 
+## Results
+
+Sample run on a developer laptop (secp256k1 ECDSA, 10 iterations per N):
+
+```
+Oracle Zone verification benchmark
+  curve: secp256k1 ECDSA (k256)
+  iterations per N: 10
+  deviation bound: 100 bps
+
+       N |    verify (ms) | per-sig (us) |        verif/sec | attested
+----------------------------------------------------------------------
+       3 |          0.525 |       175.08 |             5712 |      yes
+      10 |          0.684 |        68.44 |            14610 |      yes
+      50 |          3.579 |        71.58 |            13971 |      yes
+      64 |          5.513 |        86.14 |            11610 |      yes
+     100 |          8.899 |        88.99 |            11237 |      yes
+     500 |         50.066 |       100.13 |             9987 |      yes
+    1000 |         92.122 |        92.12 |            10855 |      yes
+----------------------------------------------------------------------
+total wall time: 3.67 s
+```
+
+The steady-state cost settles around ~90 us per signature verification (the
+N=3 row is dominated by fixed overhead). At ~11,000 verifications per second,
+the indexer can verify roughly **325,000 signatures within a 30s heartbeat** —
+about **5,000x** the LEZ on-chain ceiling of ~64 ECDSA verifications per program
+execution (32M cycle budget / ~524K cycles per secp256k1 verify).
+
+This is the core result: moving signature verification off LEZ into a dedicated
+Oracle Zone removes the small-committee (N <= 64) bottleneck entirely, making a
+large, decentralized oracle set feasible.
+
 Only `common` is needed to build `oracle-bench`; if the SDK paths give you
 trouble, you can build just the bench by temporarily removing `sequencer` and
 the `oracle-indexer` bin from the workspace.
