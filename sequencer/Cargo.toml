@@ -1,24 +1,20 @@
 [package]
-name        = "oracle-zone-indexer"
-description = "Oracle Zone demo indexer: follows the inscription stream, verifies signatures, filters outliers, attests the price on quorum"
+name        = "oracle-zone-sequencer"
+description = "Oracle Zone demo sequencer: simulated oracle users publish signed BTC/USDT prices to a mock Bedrock; indexers follow over TCP"
 edition     = { workspace = true }
 license     = { workspace = true }
 repository  = { workspace = true }
 version     = { workspace = true }
 
 [[bin]]
-name = "oracle-indexer"
+name = "oracle-sequencer"
 path = "src/main.rs"
 
 [dependencies]
 oracle-zone-common = { workspace = true }
 anyhow             = { workspace = true }
 clap               = { workspace = true }
-serde              = { workspace = true }
-serde_json         = { workspace = true }
+rand               = { workspace = true }
 tokio              = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-[dev-dependencies]
-oracle-zone-sequencer = { workspace = true }

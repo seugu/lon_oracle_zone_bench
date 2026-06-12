@@ -1,126 +1,180 @@
-# Logos Oracle Zone (benchmark prototype)
+# Logos Oracle Zone — End-to-End Demo
 
-A minimal Logos zone whose indexer verifies **signed price records** and
-aggregates them into an attested median — instead of replaying SQL (SQLite
-zone) or applying L2 blocks (LEZ). It mirrors the structure of the
-`logos-sql-zone` demo.
-
-The point of this prototype is to answer one question:
-
-> How many ECDSA (secp256k1) signature verifications can a zone indexer perform
-> per block, and how does that compare to LEZ's on-chain ceiling of ~64 ECDSA
-> verifications (32M cycle budget / ~524K cycles per verify)?
-
-If the indexer can verify far more than 64 signatures per heartbeat, then moving
-verification off LEZ into a dedicated Oracle Zone removes the small-committee
-bottleneck and the Oracle Zone separation is justified.
-
-## Layout
+A fully working Oracle Zone modeled on the [`logos-sql-zone`](https://github.com/logos-blockchain/logos-sql-zone)
+demo. Where the SQLite zone's indexer replays SQL statements into a local
+database, this zone's indexer **verifies signed price records, filters
+outliers, and attests a BTC/USDT price into state on a fixed push heartbeat**.
 
 ```
-common/      PriceRecord (sign/verify), median, aggregation logic — NO SDK dependency
-indexer/     - bin "oracle-bench" : STANDALONE benchmark, no node needed
+50 oracle users ──signed PriceRecord──▶ Sequencer ──▶ Mock Bedrock (total order, finality)
+                                                            │
+                                                  TCP follow stream (backlog + live)
+                                                            │
+                                                            ▼
+                                                     Single Indexer
+                                              every 5 s (push heartbeat):
+                                              1. verify all ECDSA signatures
+                                              2. mean of verified prices
+                                              3. drop records > 5% from mean
+                                              4. if ≥ 10 survive → attest mean
+                                                            │
+                                                            ▼
+                                          data/latest.json + data/history.jsonl
 ```
 
-> Note: this package is trimmed to the standalone benchmark, which is all you
-> need to answer the verification-throughput question. The live `oracle-indexer`
-> and `oracle-sequencer` binaries (which require the Logos zone SDK) are kept in
-> the full version; they are omitted here so the benchmark builds with zero
-> internal dependencies.
+## Components
 
-## Build & run
+| Component | Folder | Role |
+|---|---|---|
+| **Common** | `common/` | Signed `PriceRecord` (secp256k1 ECDSA, domain-separated digest), round aggregation (verify → mean → 5% outlier band → quorum), mock Bedrock (ordered, finalized inscription log) |
+| **Sequencer** | `sequencer/` | Simulates 50 oracle users (6 of them persistent outlier producers), publishes their signed records to the mock Bedrock, serves the TCP follow stream |
+| **Indexer** | `indexer/` | Follows the stream (backlog replay + live tail, gap-free), runs the 5 s push rounds, writes attested state |
 
-No node required. This is the fastest way to get the numbers:
+The mock Bedrock preserves exactly what the real chain gives a zone — total
+order, finality, replayability — so swapping it for the real
+`logos-blockchain-zone-sdk` sequencer/indexer pair is a transport change only;
+the record format and aggregation logic stay identical.
+
+## Prerequisites
+
+* **Rust** (any recent stable; the workspace is pinned to build on 1.75+).
+
+## Build
 
 ```bash
-# default: N = 10
-cargo run --release --bin oracle-bench
-
-# match LEZ's theoretical on-chain ceiling
-cargo run --release --bin oracle-bench -- --n 64
-
-# sweep a range and print a table
-cargo run --release --bin oracle-bench -- --sweep 3,10,50,64,100,500,1000
-
-# average each measurement over more iterations
-cargo run --release --bin oracle-bench -- --n 100 --iterations 50
+cargo build --release --workspace
 ```
 
-Output reports, per N: average verify time (ms), per-signature time (us),
-verifications per second, and an extrapolation to a 30s heartbeat, plus a
-comparison line against the LEZ 64-verification ceiling.
+## Run the demo
 
-## Results
-
-Sample run on a developer laptop (secp256k1 ECDSA, 10 iterations per N):
-
-```
-Oracle Zone verification benchmark
-  curve: secp256k1 ECDSA (k256)
-  iterations per N: 10
-  deviation bound: 100 bps
-
-       N |    verify (ms) | per-sig (us) |        verif/sec | attested
-----------------------------------------------------------------------
-       3 |          0.525 |       175.08 |             5712 |      yes
-      10 |          0.684 |        68.44 |            14610 |      yes
-      50 |          3.579 |        71.58 |            13971 |      yes
-      64 |          5.513 |        86.14 |            11610 |      yes
-     100 |          8.899 |        88.99 |            11237 |      yes
-     500 |         50.066 |       100.13 |             9987 |      yes
-    1000 |         92.122 |        92.12 |            10855 |      yes
-----------------------------------------------------------------------
-total wall time: 3.67 s
-```
-
-The steady-state cost settles around ~90 us per signature verification (the
-N=3 row is dominated by fixed overhead). At ~11,000 verifications per second,
-the indexer can verify roughly **325,000 signatures within a 30s heartbeat** —
-about **5,000x** the LEZ on-chain ceiling of ~64 ECDSA verifications per program
-execution (32M cycle budget / ~524K cycles per secp256k1 verify).
-
-This is the core result: moving signature verification off LEZ into a dedicated
-Oracle Zone removes the small-committee (N <= 64) bottleneck entirely, making a
-large, decentralized oracle set feasible.
-
-Only `common` is needed to build `oracle-bench`; if the SDK paths give you
-trouble, you can build just the bench by temporarily removing `sequencer` and
-the `oracle-indexer` bin from the workspace.
-
-## End-to-end against a node (optional)
-
-Run a local Logos node (port 8080), then:
+### Terminal 1 — Sequencer (oracle users + mock Bedrock)
 
 ```bash
-# terminal 1 — oracle node publishes 10 signed records per block, once a second
-cargo run --release --bin oracle-sequencer -- --records-per-block 10 --interval-ms 1000
+cargo run --release --bin oracle-sequencer
+```
 
-# terminal 2 — indexer verifies each block and logs verify time per block
+| Flag | Default | Meaning |
+|---|---|---|
+| `--listen 127.0.0.1:9090` | `127.0.0.1:9090` | Follow-stream listen address |
+| `--users 50` | 50 | Total simulated oracle users |
+| `--outlier-users 6` | 6 | Users that always report 6–12% off the market |
+| `--base-price 6500000` | 65000.00 | Starting BTC/USDT price in cents |
+| `--min-interval-ms 800` / `--max-interval-ms 4000` | 800 / 4000 | Per-user submit cadence (randomized) |
+
+Honest users report the shared market price (a slow ±5 bps/s random walk)
+plus their own ±0.8% observation noise. Outlier users are always outside the
+5% band, so the indexer must reject every one of them.
+
+### Terminal 2 — Indexer (verify, filter, attest, persist)
+
+```bash
 cargo run --release --bin oracle-indexer
 ```
 
-The indexer log line per block:
+| Flag | Default | Meaning |
+|---|---|---|
+| `--connect 127.0.0.1:9090` | `127.0.0.1:9090` | Sequencer follow stream |
+| `--heartbeat-ms 5000` | 5000 | Push round interval |
+| `--quorum 10` | 10 | Minimum surviving records to attest |
+| `--outlier-bps 500` | 500 (= 5%) | Outlier band around the round mean |
+| `--state-dir ./data` | `./data` | Where `latest.json` / `history.jsonl` go |
+
+Or run both with one command: `./run-demo.sh`
+
+## Expected output (real captured run)
+
+Sequencer:
 
 ```
-block: 10 records | 10 verified | 0 bad-sig | 0 outlier | verify_time = X.XXX ms | attested = Some(65003)
+INFO oracle_sequencer: Oracle Zone sequencer starting
+INFO oracle_sequencer:   users=50 (outliers=6)  base=65000.00  interval=800..4000ms
+INFO oracle_zone_sequencer: Follow server listening on 127.0.0.1:9090
+INFO oracle_zone_sequencer: Published seq=0 price=64869.92 signer=02464c0f69…
+INFO oracle_zone_sequencer: Published seq=1 price=64577.28 signer=03139382e7…
+INFO oracle_zone_sequencer: Published seq=2 price=65403.18 signer=0211077b91…
+...
 ```
 
-Vary `--records-per-block` to push the per-block verification load up and watch
-`verify_time` scale.
+Indexer (one line per 5 s round — note the outliers being cut every round):
 
-## Knobs
+```
+INFO oracle_indexer: Connected, following inscription stream
+INFO oracle_indexer: round 1: ATTESTED BTC/USDT = 65050.43 | received=113 verified=113 bad_sig=0 outliers=13 survivors=100 | verify=14.269 ms | state -> ./data/latest.json
+INFO oracle_indexer: round 2: ATTESTED BTC/USDT = 65049.12 | received=108 verified=108 bad_sig=0 outliers=12 survivors=96 | verify=13.106 ms | state -> ./data/latest.json
+INFO oracle_indexer: round 3: ATTESTED BTC/USDT = 65081.35 | received=106 verified=106 bad_sig=0 outliers=10 survivors=96 | verify=12.249 ms | state -> ./data/latest.json
+```
 
-- `--records-per-block N` (sequencer): signatures packed into one block.
-- `--n` / `--sweep` (bench): verification count(s) to measure.
-- `--deviation-bps` (indexer/bench): outlier filter width in basis points.
-- `--min-quorum` (indexer): minimum valid prices to attest a median.
+When the quorum is not met, nothing is written (run with `--users 4` to see it):
 
-## Notes
+```
+INFO oracle_indexer: round 1: quorum NOT met (8 valid < 10) | received=10 bad_sig=0 outliers=2 | verify=1.206 ms | state unchanged
+```
 
-- Signing happens outside the timed region in the bench; only verification is
-  measured, since verification is the indexer's actual on-chain-equivalent work.
-- The block payload format is newline-delimited JSON (one PriceRecord per line),
-  matching the SQLite demo's one-statement-per-line convention.
-- secp256k1 ECDSA is used to match the LEZ signature benchmark and the 524K
-  cycle figure. Swapping to Schnorr is a one-line change in `price.rs` if you
-  want to compare.
+## Attested state format
+
+`data/latest.json` (overwritten every attested round; `history.jsonl` appends
+one line per round):
+
+```json
+{
+  "round": 3,
+  "pair": "BTC/USDT",
+  "attested_price": 6508135,
+  "attested_price_human": "65081.35",
+  "survivors": 96,
+  "verified": 106,
+  "rejected_sig": 0,
+  "rejected_outlier": 10,
+  "verify_ms": 12.25,
+  "finalized_at_ms": 1781039687794
+}
+```
+
+Any party running this indexer against the same inscription stream
+reconstructs the same attested history — aggregation is deterministic given
+the ordered inputs, which is why (exactly as in the SQLite demo) **one
+indexer suffices**; more indexers add availability, not security.
+
+## Tests
+
+```bash
+cargo test --workspace --release
+```
+
+17 tests cover:
+
+* **Crypto** (`common/src/price.rs`): sign/verify roundtrip; tamper of every
+  signed field fails; signatures are not transplantable between keys; JSON
+  wire roundtrip preserves validity.
+* **Aggregation** (`common/src/aggregate.rs`): quorum met with outliers
+  filtered (±8% cut, attested within 0.5% of market); no attestation below
+  quorum; outliers can never rescue a quorum; bad signatures never count;
+  symmetric negative outliers; empty round is a clean no-op.
+* **Ordering** (`common/src/bedrock.rs`): dense monotonic sequence numbers;
+  the subscribe-then-backlog pattern loses nothing; line encoding roundtrip.
+* **End-to-end** (`indexer/tests/e2e.rs`): full in-process pipeline
+  (users → Bedrock → backlog → round → attestation); quorum blocking the
+  state write; and the **real TCP path** — backlog replay plus a live
+  inscription arrive gap-free, in order, and attest.
+
+## Design notes
+
+* **Crypto**: secp256k1 ECDSA via `k256` (RFC 6979 deterministic nonces),
+  matching the LEZ signature benchmark for apples-to-apples comparisons. The
+  signed digest is domain-separated (`LON-ORACLE-PRICE-V1`) and length-prefixed,
+  so signatures cannot be replayed across protocols or reinterpreted across
+  field boundaries. Each record carries a random 16-byte nonce.
+* **Mean vs median**: the 5% outlier band is computed around the **mean** of
+  verified prices, per the demo spec. The mean is draggable by coordinated
+  outliers before they are filtered; with a minority of outliers and a 5% band
+  it behaves correctly (tests pin this down), but a production zone should use
+  a median-based provisional reference.
+* **Push windows**: rounds window records by arrival within the heartbeat.
+  Deterministic replay across independent indexers should window by Bedrock
+  sequence/height instead of wall-clock — a straightforward change once the
+  real chain provides block heights.
+* **Throughput context**: the indexer verifies a 100+ record round in ~13 ms.
+  The earlier standalone benchmark measured ~11,000 verifications/second
+  (~325k per 30 s heartbeat) — roughly 5,000× the LEZ on-chain ceiling of
+  ~64 ECDSA verifications per program execution, which is the quantitative
+  case for the Oracle Zone separation.

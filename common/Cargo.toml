@@ -1,16 +1,17 @@
 [package]
+name        = "oracle-zone-common"
+description = "Shared types for the LON Oracle Zone demo: signed price records, mock Bedrock ordering, and the round aggregation logic"
 edition     = { workspace = true }
 license     = { workspace = true }
-name        = "oracle-zone-common"
 repository  = { workspace = true }
 version     = { workspace = true }
 
 [dependencies]
-hex        = { workspace = true, features = ["alloc"] }
-k256       = { workspace = true, features = ["ecdsa", "arithmetic"] }
-rand       = { workspace = true, features = ["std", "std_rng"] }
+hex        = { workspace = true }
+k256       = { workspace = true }
+rand       = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 sha2       = { workspace = true }
 thiserror  = { workspace = true }
-uuid       = { workspace = true, features = ["v4", "serde"] }
+tokio      = { workspace = true }

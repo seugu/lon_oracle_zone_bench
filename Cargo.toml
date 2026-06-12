@@ -1,22 +1,26 @@
 [workspace.package]
-edition    = "2024"
-license    = "MIT or Apache-2.0"
-repository = "https://github.com/logos-blockchain/logos-blockchain"
+edition    = "2021"
+license    = "MIT OR Apache-2.0"
+repository = "https://github.com/seugu/lon_oracle_zone_bench"
 version    = "0.1.0"
 
 [workspace]
-members  = ["common", "indexer"]
+members  = ["common", "sequencer", "indexer"]
 resolver = "2"
 
 [workspace.dependencies]
 oracle-zone-common = { path = "./common" }
+oracle-zone-sequencer = { path = "./sequencer" }
 
-clap       = { default-features = false, version = "4" }
-hex        = { default-features = false, version = "0.4" }
-k256       = { default-features = false, version = "0.13", features = ["ecdsa", "arithmetic"] }
-rand       = { default-features = false, version = "0.8" }
-serde      = { default-features = false, version = "1.0", features = ["derive"] }
-serde_json = { default-features = false, version = "1.0", features = ["std"] }
-sha2       = { default-features = false, version = "0.10" }
-thiserror  = { default-features = false, version = "2.0" }
-uuid       = { default-features = false, version = "1", features = ["v4"] }
+anyhow             = "1"
+clap               = { version = "=4.5.23", features = ["derive", "env"] }
+hex                = "0.4"
+k256               = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic", "std"] }
+rand               = "0.8"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+sha2               = "0.10"
+thiserror          = "1"
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
