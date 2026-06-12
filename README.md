@@ -1,3 +1,5 @@
+AI generated code, don't trust only poc purpose
+
 # Logos Oracle Zone — End-to-End Demo
 
 A fully working Oracle Zone modeled on the [`logos-sql-zone`](https://github.com/logos-blockchain/logos-sql-zone)
