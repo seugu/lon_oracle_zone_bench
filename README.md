@@ -1,6 +1,6 @@
 AI generated code, don't trust only poc purpose
 
-# Logos Oracle Zone — End-to-End Demo
+# Logos Oracle Zone — End-to-End Local Demo (no live sequencer)
 
 A fully working Oracle Zone modeled on the [`logos-sql-zone`](https://github.com/logos-blockchain/logos-sql-zone)
 demo. Where the SQLite zone's indexer replays SQL statements into a local
