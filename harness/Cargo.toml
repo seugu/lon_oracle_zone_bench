@@ -1,0 +1,24 @@
+[package]
+name = "lon_harness"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "lon_multi_tx"
+path = "src/main.rs"
+
+[dependencies]
+lon_sig_accum_program = { path = "../program" }
+spel-framework = { workspace = true, features = ["host"] }
+nssa = { workspace = true }
+nssa_core = { workspace = true, features = ["host"] }
+risc0-zkos-v1compat = "=2.2.3"
+risc0-zkvm = { workspace = true }
+risc0-binfmt = { workspace = true }
+borsh = { workspace = true }
+k256 = { workspace = true }
+tiny-keccak = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }

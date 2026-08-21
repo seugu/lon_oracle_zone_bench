@@ -1,0 +1,13 @@
+[package]
+name = "lon_sig_accum_program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spel-framework = { workspace = true }
+nssa_core = { workspace = true }
+borsh = { workspace = true }
+serde = { workspace = true }
+k256 = { workspace = true }
+sha2 = { workspace = true }
+tiny-keccak = { workspace = true }

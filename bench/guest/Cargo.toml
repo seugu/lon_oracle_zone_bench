@@ -1,0 +1,27 @@
+[package]
+name = "lon_bench-guest"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "lon_bench"
+path = "src/bin/lon_bench.rs"
+
+[dependencies]
+risc0-zkvm = { version = "=3.0.5", features = ["std"] }
+lon_bench_common = { path = "../common" }
+borsh = { version = "1.5", features = ["derive"] }
+k256 = { version = "0.13.4", features = ["ecdsa", "schnorr"] }
+sha2 = "0.10"
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+
+# Accelerated build. Dropping this whole block is what the original PoC did by
+# accident — its guest declared its own workspace, so the patch in the outer
+# workspace root never reached it.
+[patch.crates-io]
+crypto-bigint = { git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.5-risczero.0" }
+k256 = { git = "https://github.com/risc0/RustCrypto-elliptic-curves", tag = "k256/v0.13.4-risczero.1" }
+sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2-v0.10.9-risczero.0" }
+tiny-keccak = { git = "https://github.com/risc0/tiny-keccak", tag = "tiny-keccak/v2.0.2-risczero.0" }

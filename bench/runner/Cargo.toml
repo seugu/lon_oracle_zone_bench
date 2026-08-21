@@ -1,0 +1,19 @@
+[package]
+name = "lon_bench_runner"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "lon_bench_runner"
+path = "src/main.rs"
+
+[dependencies]
+lon_bench_common = { path = "../common" }
+risc0-zkvm = { workspace = true }
+risc0-binfmt = { workspace = true }
+risc0-zkos-v1compat = "=2.2.3"
+borsh = { workspace = true }
+k256 = { version = "0.13.4", features = ["ecdsa", "schnorr"] }
+sha2 = "0.10"
+tiny-keccak = { workspace = true }
+anyhow = { workspace = true }

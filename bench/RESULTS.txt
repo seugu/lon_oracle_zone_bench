@@ -1,0 +1,123 @@
+LON dispute-resolution workload — zkVM cycle cost
+=================================================
+Budget: MAX_NUM_CYCLES_PUBLIC_EXECUTION = 33,554,432 (32M)
+Active oracle set: 512 members => Merkle depth 9
+Guest: riscv32im-risc0-zkvm-elf, risc0-zkvm 3.0.5, measured with SessionInfo::cycles()
+
+PER-OBSERVATION MARGINAL COST
+                                accelerated    unaccelerated    speedup
+  Merkle membership (depth 9)       102,022          176,027       1.7x
+  BIP-340 Schnorr verify            375,131        5,626,306      15.0x
+  BIP-340 + membership              390,327        5,715,435      14.6x
+  ECDSA recover (comparison)        687,759       11,503,665      16.7x
+
+"accelerated"   = guest patched to risc0 forks of k256, crypto-bigint, sha2, tiny-keccak
+"unaccelerated" = stock crates.io, i.e. what lon_poc/sig_verif_2 actually shipped
+                  (its methods/guest/Cargo.toml declares its own [workspace] and
+                   carries no [patch.crates-io], so the outer patch never reached it)
+
+The unaccelerated ECDSA figure (11.50M) reproduces the 11.75M noted in
+lon_poc/poc_1/no_spel/no_spel_e2e_tests/src/lib.rs, which is where "max 2
+signatures per transaction" came from.
+
+DISPUTE RESOLUTION AT N (BIP-340 + membership, accelerated)
+      n        cycles     budget
+      1       401,142       1.2%
+      2       791,625       2.4%
+      5     1,966,949       5.9%
+     10     3,930,926      11.7%
+     25     9,781,781      29.2%
+     50    19,526,557      58.2%      <- LON default quorum, fits in ONE transaction
+     ~85           ---     100%       <- extrapolated ceiling
+
+Unaccelerated, the same workload allows 5 observations per transaction
+(28,587,352 cycles = 85.2%), so N=50 would need ~10 chunked transactions.
+
+FIXED OVERHEAD
+  Benchmark guest, n=0:                          10,202 cycles
+  SPEL program on LEZ, per public execution:   ~246,000 cycles
+    (account reads, borsh decode/encode of state, journal — measured separately
+     in the sig-accumulator harness)
+
+RAW DATA
+--------
+guest    : bench/guest/target/riscv32im-risc0-zkvm-elf/release/lon_bench
+budget   : 33554432 cycles (MAX_NUM_CYCLES_PUBLIC_EXECUTION)
+set size : 512 (Merkle depth 9)
+
+── merkle only ──
+     n        cycles     budget         per obs
+     0         10202       0.0%               -
+     1        112635       0.3%          102433
+     2        214812       0.6%          102305
+     5        520683       1.6%          102096
+    10       1030904       3.1%          102070
+    25       2560899       7.6%          102027
+    50       5111316      15.2%          102022
+
+── BIP-340 only ──
+     n        cycles     budget         per obs
+     0         10202       0.0%               -
+     1        385944       1.2%          375742
+     2        761230       2.3%          375514
+     5       1890964       5.6%          376152
+    10       3778961      11.3%          376875
+    25       9401885      28.0%          375667
+    50      18766790      55.9%          375131
+
+── BIP-340 + merkle ──
+     n        cycles     budget         per obs
+     0         10202       0.0%               -
+     1        401142       1.2%          390940
+     2        791625       2.4%          390711
+     5       1966949       5.9%          391349
+    10       3930926      11.7%          392072
+    25       9781781      29.2%          390863
+    50      19526557      58.2%          390327
+
+── ECDSA recover only ──
+     n        cycles     budget         per obs
+     0         10202       0.0%               -
+     1        701084       2.1%          690882
+     2       1393626       4.2%          691712
+     5       3465275      10.3%          691014
+    10       6901666      20.6%          689146
+    25      17186538      51.2%          687053
+    50      34398179     102.5%          687759
+
+EXIT=0
+
+=== UNACCELERATED ===
+guest    : /home/claude/bench_guest_unpatched/target/riscv32im-risc0-zkvm-elf/release/lon_bench
+budget   : 33554432 cycles (MAX_NUM_CYCLES_PUBLIC_EXECUTION)
+set size : 512 (Merkle depth 9)
+
+── merkle only ──
+     n        cycles     budget         per obs
+     0         10176       0.0%               -
+     1        186536       0.6%          176360
+     2        362645       1.1%          176234
+     5        890312       2.7%          176027
+
+── BIP-340 only ──
+     n        cycles     budget         per obs
+     0         10176       0.0%               -
+     1       5636814      16.8%         5626638
+     2      11263202      33.6%         5626513
+     5      28141707      83.9%         5626306
+
+── BIP-340 + merkle ──
+     n        cycles     budget         per obs
+     0         10176       0.0%               -
+     1       5725944      17.1%         5715768
+     2      11441461      34.1%         5715642
+     5      28587352      85.2%         5715435
+
+── ECDSA recover only ──
+     n        cycles     budget         per obs
+     0         10176       0.0%               -
+     1      11514698      34.3%        11504522
+     2      23009996      68.6%        11499910
+     5      57528502     171.4%        11503665
+
+EXIT=0

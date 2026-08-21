@@ -1,22 +1,28 @@
-[workspace.package]
-edition    = "2024"
-license    = "MIT or Apache-2.0"
-repository = "https://github.com/logos-blockchain/logos-blockchain"
-version    = "0.1.0"
-
 [workspace]
-members  = ["common", "indexer"]
+members = ["program", "harness", "bench/common", "bench/runner"]
+# `cargo run` without -p would be ambiguous otherwise: bench/runner has a bin too.
+default-members = ["harness"]
+exclude = ["methods/guest", "bench/guest"]
 resolver = "2"
 
 [workspace.dependencies]
-oracle-zone-common = { path = "./common" }
+spel-framework = { git = "https://github.com/logos-co/spel.git", branch = "main" }
+nssa = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0", package = "lee" }
+nssa_core = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0", package = "lee_core" }
+risc0-zkvm = { version = "=3.0.5", features = ["std", "prove"] }
+risc0-binfmt = "=3.0.5"
+borsh = { version = "1.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+k256 = { version = "0.13.4", features = ["ecdsa", "schnorr"] }
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+sha2 = "0.10"
+anyhow = "1"
+hex = "0.4"
 
-clap       = { default-features = false, version = "4" }
-hex        = { default-features = false, version = "0.4" }
-k256       = { default-features = false, version = "0.13", features = ["ecdsa", "arithmetic"] }
-rand       = { default-features = false, version = "0.8" }
-serde      = { default-features = false, version = "1.0", features = ["derive"] }
-serde_json = { default-features = false, version = "1.0", features = ["std"] }
-sha2       = { default-features = false, version = "0.10" }
-thiserror  = { default-features = false, version = "2.0" }
-uuid       = { default-features = false, version = "1", features = ["v4"] }
+# The RISC Zero forks are drop-in on the host and switch to zkVM accelerators
+# when the target is `riscv32im-risc0-zkvm-elf`. Keeping the patch here means
+# the host build and the guest build verify signatures with the same code.
+[patch.crates-io]
+crypto-bigint = { git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.5-risczero.0" }
+tiny-keccak = { git = "https://github.com/risc0/tiny-keccak", tag = "tiny-keccak/v2.0.2-risczero.0" }
+k256 = { git = "https://github.com/risc0/RustCrypto-elliptic-curves", tag = "k256/v0.13.4-risczero.1" }
