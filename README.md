@@ -1,126 +1,120 @@
-# Logos Oracle Zone (benchmark prototype)
+# logos-oracle-zone
 
-A minimal Logos zone whose indexer verifies **signed price records** and
-aggregates them into an attested median — instead of replaying SQL (SQLite
-zone) or applying L2 blocks (LEZ). It mirrors the structure of the
-`logos-sql-zone` demo.
+A standalone Logos **Oracle Zone** node: one oracle, one channel, one writer.
 
-The point of this prototype is to answer one question:
+The node claims a Bedrock channel derived from its own keys, becomes that
+channel's sole accredited writer by being the first to inscribe into it, and
+publishes **BIP-340**-signed price records there. A second mode, `watch`, reads
+the channel back and verifies both the on-chain write permission and the
+off-chain attestation.
 
-> How many ECDSA (secp256k1) signature verifications can a zone indexer perform
-> per block, and how does that compare to LEZ's on-chain ceiling of ~64 ECDSA
-> verifications (32M cycle budget / ~524K cycles per verify)?
+The design, the wire format and the full public-testnet runbook are in
+[`oracle/README.md`](oracle/README.md). This file is only about getting the
+tree into a buildable state.
 
-If the indexer can verify far more than 64 signatures per heartbeat, then moving
-verification off LEZ into a dedicated Oracle Zone removes the small-committee
-bottleneck and the Oracle Zone separation is justified.
+---
 
 ## Layout
 
 ```
-common/      PriceRecord (sign/verify), median, aggregation logic — NO SDK dependency
-indexer/     - bin "oracle-bench" : STANDALONE benchmark, no node needed
+.
+├── Cargo.toml           workspace root
+├── rust-toolchain.toml
+├── logos-blockchain/    the Logos node repo, pinned to 0.2.2  <- you add this
+└── oracle/              the oracle crate
 ```
 
-> Note: this package is trimmed to the standalone benchmark, which is all you
-> need to answer the verification-throughput question. The live `oracle-indexer`
-> and `oracle-sequencer` binaries (which require the Logos zone SDK) are kept in
-> the full version; they are omitted here so the benchmark builds with zero
-> internal dependencies.
+`oracle` is a Cargo *package*, not a self-contained program: it links against
+`lb-core`, `lb-common-http-client`, `lb-key-management-system-service`,
+`lb-groth16` and `logos-blockchain-zone-sdk` by path. So `logos-blockchain/`
+has to be there before anything builds.
 
-## Build & run
+## 1. Add the Logos blockchain source
 
-No node required. This is the fastest way to get the numbers:
+Pin it to **0.2.2** — the release the public testnet runs. `master` is not
+interchangeable: the zone SDK API moved after 0.2.2 (`ZoneSequencer::init`
+gained a mandatory `FundingConfig`, the `indexer` module was removed).
+
+Either as a plain clone:
 
 ```bash
-# default: N = 10
-cargo run --release --bin oracle-bench
-
-# match LEZ's theoretical on-chain ceiling
-cargo run --release --bin oracle-bench -- --n 64
-
-# sweep a range and print a table
-cargo run --release --bin oracle-bench -- --sweep 3,10,50,64,100,500,1000
-
-# average each measurement over more iterations
-cargo run --release --bin oracle-bench -- --n 100 --iterations 50
+git clone https://github.com/logos-blockchain/logos-blockchain.git
+cd logos-blockchain && git checkout 0.2.2 && cd ..
 ```
 
-Output reports, per N: average verify time (ms), per-signature time (us),
-verifications per second, and an extrapolation to a 30s heartbeat, plus a
-comparison line against the LEZ 64-verification ceiling.
-
-## Results
-
-Sample run on a developer laptop (secp256k1 ECDSA, 10 iterations per N):
-
-```
-Oracle Zone verification benchmark
-  curve: secp256k1 ECDSA (k256)
-  iterations per N: 10
-  deviation bound: 100 bps
-
-       N |    verify (ms) | per-sig (us) |        verif/sec | attested
-----------------------------------------------------------------------
-       3 |          0.525 |       175.08 |             5712 |      yes
-      10 |          0.684 |        68.44 |            14610 |      yes
-      50 |          3.579 |        71.58 |            13971 |      yes
-      64 |          5.513 |        86.14 |            11610 |      yes
-     100 |          8.899 |        88.99 |            11237 |      yes
-     500 |         50.066 |       100.13 |             9987 |      yes
-    1000 |         92.122 |        92.12 |            10855 |      yes
-----------------------------------------------------------------------
-total wall time: 3.67 s
-```
-
-The steady-state cost settles around ~90 us per signature verification (the
-N=3 row is dominated by fixed overhead). At ~11,000 verifications per second,
-the indexer can verify roughly **325,000 signatures within a 30s heartbeat** —
-about **5,000x** the LEZ on-chain ceiling of ~64 ECDSA verifications per program
-execution (32M cycle budget / ~524K cycles per secp256k1 verify).
-
-This is the core result: moving signature verification off LEZ into a dedicated
-Oracle Zone removes the small-committee (N <= 64) bottleneck entirely, making a
-large, decentralized oracle set feasible.
-
-Only `common` is needed to build `oracle-bench`; if the SDK paths give you
-trouble, you can build just the bench by temporarily removing `sequencer` and
-the `oracle-indexer` bin from the workspace.
-
-## End-to-end against a node (optional)
-
-Run a local Logos node (port 8080), then:
+or, if you want this tree to be a git repo of its own, as a submodule — a
+`.gitmodules` entry is already here:
 
 ```bash
-# terminal 1 — oracle node publishes 10 signed records per block, once a second
-cargo run --release --bin oracle-sequencer -- --records-per-block 10 --interval-ms 1000
-
-# terminal 2 — indexer verifies each block and logs verify time per block
-cargo run --release --bin oracle-indexer
+git init
+git submodule add https://github.com/logos-blockchain/logos-blockchain.git logos-blockchain
+cd logos-blockchain && git checkout 0.2.2 && cd ..
+git add . && git commit -m "Oracle Zone node"
 ```
 
-The indexer log line per block:
+## 2. Build
+
+Debian/Ubuntu (WSL included) needs a C toolchain for RocksDB and the C
+bindings:
+
+```bash
+sudo apt install -y build-essential clang libclang-dev llvm-dev cmake \
+                    pkg-config libssl-dev git curl jq
+```
+
+Then:
+
+```bash
+cargo test  -p logos-oracle-node     # 13 tests, incl. the official BIP-340 vectors
+cargo build -p logos-oracle-node --release
+```
+
+If the circuits build script cannot reach GitHub releases, fetch the artifact
+by hand and point `LBC_ROOT_DIR` at it:
+
+```bash
+curl -L -o lbc.tar.gz \
+  https://github.com/logos-blockchain/logos-blockchain-circuits/releases/download/v0.5.3/logos-blockchain-circuits-v0.5.3-linux-x86_64.tar.gz
+tar xzf lbc.tar.gz
+export LBC_ROOT_DIR="$PWD/logos-blockchain-circuits-v0.5.3-linux-x86_64"
+```
+
+## 3. Run
+
+```bash
+./target/release/logos-oracle-node identity   # keys + the channel id they derive
+./target/release/logos-oracle-node run   --funding-pk <node wallet key>
+./target/release/logos-oracle-node state                 # who owns the channel, on chain
+./target/release/logos-oracle-node watch --expect-writer <attestation key>
+```
+
+Joining the public testnet, funding a node and reading the output:
+[`oracle/README.md`](oracle/README.md). `oracle/.env.example-oracle` has every
+setting as an environment variable.
+
+---
+
+## Note on `exclude = ["logos-blockchain"]`
+
+The workspace root carries:
+
+```toml
+[workspace]
+members = ["oracle"]
+exclude = ["logos-blockchain"]
+```
+
+Cargo resolves a package to the **outermost** workspace root above it. Without
+`exclude`, every `{ workspace = true }` inside `logos-blockchain/` would look
+up this file's `[workspace.dependencies]` table instead of the submodule's own,
+and the build would fail as soon as the submodule gained a dependency this file
+does not mirror:
 
 ```
-block: 10 records | 10 verified | 0 bad-sig | 0 outlier | verify_time = X.XXX ms | attested = Some(65003)
+error inheriting `lb-blake2btree` from workspace root manifest's
+`workspace.dependencies.lb-blake2btree`
 ```
 
-Vary `--records-per-block` to push the per-block verification load up and watch
-`verify_time` scale.
-
-## Knobs
-
-- `--records-per-block N` (sequencer): signatures packed into one block.
-- `--n` / `--sweep` (bench): verification count(s) to measure.
-- `--deviation-bps` (indexer/bench): outlier filter width in basis points.
-- `--min-quorum` (indexer): minimum valid prices to attest a median.
-
-## Notes
-
-- Signing happens outside the timed region in the bench; only verification is
-  measured, since verification is the indexer's actual on-chain-equivalent work.
-- The block payload format is newline-delimited JSON (one PriceRecord per line),
-  matching the SQLite demo's one-statement-per-line convention.
-- secp256k1 ECDSA is used to match the LEZ signature benchmark and the 524K
-  cycle figure. Swapping to Schnorr is a one-line change in `price.rs` if you
-  want to compare.
+`exclude` hands those crates back to their own manifest, which is always in
+sync with them. Path dependencies keep working, and there is still one lock
+file.

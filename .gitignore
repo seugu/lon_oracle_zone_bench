@@ -1,0 +1,7 @@
+/target/
+/data/
+*.tmp
+
+# Prebuilt ZK circuit artifacts, if fetched by hand (see README).
+/logos-blockchain-circuits-*/
+/lbc.tar.gz

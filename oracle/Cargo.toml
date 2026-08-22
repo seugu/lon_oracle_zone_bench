@@ -1,0 +1,45 @@
+[package]
+categories  = { workspace = true }
+description = "Logos Oracle Zone node - single-writer price channel with BIP-340 attestations"
+edition     = { workspace = true }
+keywords    = { workspace = true }
+license     = { workspace = true }
+name        = "logos-oracle-node"
+readme      = { workspace = true }
+repository  = { workspace = true }
+version     = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "logos-oracle-node"
+path = "src/main.rs"
+
+[dependencies]
+borsh = { features = ["derive"], version = "1" }
+clap = { features = ["derive", "env", "std"], version = "4" }
+futures = { default-features = false, version = "0.3" }
+hex = "0.4"
+lb-common-http-client = { workspace = true }
+lb-core = { workspace = true }
+lb-groth16 = { workspace = true }
+lb-key-management-system-service = { workspace = true }
+logos-blockchain-zone-sdk = { path = "../logos-blockchain/zone-sdk" }
+rand = { version = "0.9" }
+reqwest = { features = ["json", "rustls-tls"], workspace = true }
+secp256k1 = { features = ["std"], version = "0.31" }
+serde = { features = ["derive"], workspace = true }
+serde_json = { workspace = true }
+sha2 = { default-features = false, version = "0.10" }
+thiserror = { workspace = true }
+tokio = { default-features = false, features = [
+  "macros",
+  "rt-multi-thread",
+  "signal",
+  "sync",
+  "time",
+], version = "1" }
+tracing = { workspace = true }
+tracing-subscriber = { features = ["env-filter"], version = "0.3" }
+zeroize = { features = ["alloc"], workspace = true }
